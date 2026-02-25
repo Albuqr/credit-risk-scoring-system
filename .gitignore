@@ -1,0 +1,9 @@
+venv/
+__pycache__/
+*.pkl
+*.pyc
+data/*.csv
+.env
+mlruns/
+.DS_Store
+EOF
