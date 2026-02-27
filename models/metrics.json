@@ -1,0 +1,7 @@
+{
+  "auc": 0.8675,
+  "precision": 0.223,
+  "recall": 0.7761,
+  "f1": 0.3464,
+  "run_id": "d6306f0ac37d4df5bb39d2ef9efd13d8"
+}
