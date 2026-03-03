@@ -4,7 +4,7 @@ from sklearn.preprocessing import StandardScaler
 import joblib
 from pathlib import Path
 
-MODELS_DIR = Path('models')
+MODELS_DIR = Path(__file__).parent.parent / 'models'
 
 ##this is the contact between the preprocessing and the actual model
 ##changing this list requires re-training the model
