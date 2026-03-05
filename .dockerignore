@@ -1,0 +1,15 @@
+.venv/
+.git/
+.idea/
+mlruns/
+notebooks/
+data/
+docs/
+.gitignore
+.gitattributes
+requirements.txt
+mlflow.db
+*.sqlite
+shap_force_plot_high_risk.png
+__pycache__/
+*.pyc
