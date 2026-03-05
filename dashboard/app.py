@@ -6,6 +6,7 @@ import numpy as np
 import plotly.express as px
 from pathlib import Path
 import sys; sys.path.append('.')
+BASE_DIR = Path(__file__).parent.parent
 from api.predictor import CreditRiskPredictor
 from api.schemas import CustomerInput
 
@@ -35,7 +36,7 @@ with tab1:
                  color_continuous_scale='blues', title='Model Comparison')
     fig.update_layout(yaxis_range=[0.7,1.0])
     st.plotly_chart(fig, use_container_width=True)
-    st.image('docs/shap_summary.png', caption='SHAP Global Importance', use_container_width=True)
+    st.image(str(BASE_DIR / 'docs' / 'shap_summary.png'), caption='SHAP Global Importance', use_container_width=True)
 
 with tab2:
     st.header('Score a Customer')
