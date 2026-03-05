@@ -3,7 +3,6 @@
 .idea/
 mlruns/
 notebooks/
-data/
 .gitignore
 .gitattributes
 mlflow.db
