@@ -39,7 +39,7 @@ class PredictionOutput(BaseModel):
     model_version: str
 
 class BatchInput(BaseModel):
-    customers: list[CustomerInput]
+    customers: List[CustomerInput] = Field(..., min_length=1, max_length=100)
 
 class BatchOutput(BaseModel):
     predictions: list[PredictionOutput]
