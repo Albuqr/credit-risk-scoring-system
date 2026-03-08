@@ -217,3 +217,5 @@ data/*.csv
 
 # ML project: generated plots (root-level)
 shap_force_plot_high_risk.png
+data/lc/
+data/*.csv
