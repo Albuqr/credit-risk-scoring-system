@@ -41,12 +41,8 @@ FEATURE_NAMES = [
 
 def clean_raw_data(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
-    df['monthlyincome'] = df['monthlyincome'].fillna(df['monthlyincome'].median())
-    df['numberofdependents'] = df['numberofdependents'].fillna(0)
-    df = df[df['age'] >= 18].copy()
-    df['revolvingutilizationofunsecuredlines'] = (
-        df['revolvingutilizationofunsecuredlines'].clip(upper=1.0)
-    )
+    df = df[df["age"] >= 18].copy()
+    df["revolving_utilization"] = df["revolving_utilization"].clip(0, 1)
     return df
 
 ## Engineering and Matrix Builder
@@ -54,22 +50,10 @@ def clean_raw_data(df: pd.DataFrame) -> pd.DataFrame:
 def engineer_features(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
 
-## Turn raw debt-to-income in Dollars
-
-    df['debt_to_income'] = df['debtratio'] * df['monthlyincome']
-
-## Log Transforms: log(x+1) handles zero safely, compresses right skew
-
-    df['log_income'] = np.log1p(df['monthlyincome'])
+    ## Log Transforms - log(x+1) handles zero, compresses right skew
+    df['log_income'] = np.log1p(df['monthly_income'])
+    df['debt_to_income'] = df['debt_ratio'] * df['monthly_income'].fillna(0)
     df['log_debt_to_income'] = np.log1p(df['debt_to_income'])
-
-## Aggregate late payment history across all severity buckets
-
-    df['total_late_payments'] = (
-        df['numberoftime30_59dayspastduenotworse'] +
-        df['numberoftime60_89dayspastduenotworse'] +
-        df['numberoftimes90dayslate']
-     )
 
     # Loan features
     df["log_loan_amount"] = np.log1p(df["loan_amount"].fillna(0))
@@ -96,10 +80,8 @@ def engineer_features(df: pd.DataFrame) -> pd.DataFrame:
 
     # Asset features
     df["owns_property"] = df["owns_property"].fillna(0)
-
     df["owns_vehicle"] = df["owns_vehicle"].fillna(0)
     df["asset_score"] = df["owns_property"] * 2 + df["owns_vehicle"]
-
 
     # Employment features
     df["employment_stability"] = np.log1p(df["months_employed"])
@@ -107,21 +89,20 @@ def engineer_features(df: pd.DataFrame) -> pd.DataFrame:
         df["months_employed"].notna(),
         (df["months_employed"] >= 24).astype(int), np.nan)
 
-
     # Interaction terms
     df["age_x_log_loan"] = df["age"] * df["log_loan_amount"]
     df["income_x_property"] = df["log_income"] * df["owns_property"]
 
     df["utilization_x_late"] = (
-            df["revolving_utilization"] * df["total_late_payments"].fillna(0))
+        df["revolving_utilization"] * df["total_late_payments"].fillna(0))
 
     df["debt_ratio_x_loan_to_income"] = (
-            df["debt_ratio"].fillna(0) * df["loan_to_income"].fillna(0))
+        df["debt_ratio"].fillna(0) * df["loan_to_income"].fillna(0))
 
     # Question : Has this person EVER been late? Strong signal
-
-    df['has_late_payment'] = (df['total_late_payments'] > 0).astype(int)
+    df['has_late_payment'] = (df['total_late_payments'].fillna(0) > 0).astype(int)
     return df
+
 
 # This will return the columns in the exact order defined in FEATURE_NAMES
 def build_feature_matrix(df: pd.DataFrame) -> pd.DataFrame:
@@ -131,7 +112,7 @@ def build_feature_matrix(df: pd.DataFrame) -> pd.DataFrame:
             result[feat] = df[feat].values
         else:
             result[feat] = np.full(len(df), np.nan)
-        return pd.DataFrame(result)
+    return pd.DataFrame(result)
 
 # THIS IS IMPORTANT DICKHEAD : fit only training data, never test or validation
 

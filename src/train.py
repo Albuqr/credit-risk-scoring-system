@@ -111,8 +111,12 @@ def train_all():
             indent=2
         )
 
-        explainer = shap.TreeExplainer(xgb)
+        explainer = shap.TreeExplainer(xgb, X_train_raw, model_output="probability")
         joblib.dump(explainer, MODELS_DIR / 'shap_explainer.pkl')
+
+        # Second explainer for interaction values only
+        explainer_raw = shap.TreeExplainer(xgb)
+        joblib.dump(explainer_raw, MODELS_DIR / 'shap_explainer_raw.pkl')
 
         return xgb
 

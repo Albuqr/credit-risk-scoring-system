@@ -36,15 +36,14 @@ def load_gmc() -> pd.DataFrame:
     df["monthly_income"] = df["monthlyincome"]
     df["revolving_utilization"] = df[
     "revolvingutilizationofunsecuredlines"].clip(0, 1)
-    df["debt_ratio"] = df["debtratio"]
+    df["debt_ratio"] = df["debtratio"].clip(0, 10)
     df["open_credit_lines"] = df["numberofopencreditlinesandloans"]
     df["real_estate_loans"] = df["numberrealestateloansorlines"]
     df["dependents"] = df["numberofdependents"]
-    df["total_late_payments"] = (
-        df.get("numberoftimesle30", pd.Series(0, index=df.index)).fillna(0)
-        + df.get("numberoftimesle60", pd.Series(0, index=df.index)).fillna(0)
-        + df.get("numberoftimes90dayslate", pd.Series(0, index=df.index)).fillna(0)
-        )
+    late_30 = df.get("numberoftime30-59dayspastduenotworse", pd.Series(np.nan, index=df.index))
+    late_60 = df.get("numberoftime60-89dayspastduenotworse", pd.Series(np.nan, index=df.index))
+    late_90 = df.get("numberoftimes90dayslate", pd.Series(np.nan, index=df.index))
+    df["total_late_payments"] = late_30.fillna(0) + late_60.fillna(0) + late_90.fillna(0)
 
 # Give me some credit has no loan_amount, purpose, employment, vehicle so -
     df["loan_amount"] = np.nan
@@ -76,9 +75,9 @@ def load_lc() -> pd.DataFrame:
 
     df["monthly_income"] = df["annual_inc"] / 12
     df["revolving_utilization"] = pd.to_numeric(
-        df["revol_util"].str.replace("%", ""), errors="coerce") / 100
+        df["revol_util"], errors="coerce") / 100
     df["revolving_utilization"] = df["revolving_utilization"].clip(0, 1)
-    df["debt_ratio"] = df["dti"] / 100
+    df["debt_ratio"] = pd.to_numeric(df["dti"], errors="coerce") / 100
     df["open_credit_lines"] = df["open_acc"]
     df["loan_amount"] = df["loan_amnt"]
     df["loan_purpose"] = df["purpose"]
@@ -95,7 +94,7 @@ def load_lc() -> pd.DataFrame:
 
     df["months_employed"] = df["emp_length"].apply(parse_emp)
     df["owns_property"] = df["home_ownership"].isin(
-        ["MORTGAGE", "OW"]).astype(float)
+        ["MORTGAGE", "OWN"]).astype(float)
     df.loc[df["home_ownership"].isna(), "owns_property"] = np.nan
 
 # Lending club has no age, late payment data, real estate loans, dependent or vehicle
@@ -104,7 +103,7 @@ def load_lc() -> pd.DataFrame:
     df["total_late_payments"] = np.nan
     df["real_estate_loans"] = np.nan
     df["dependents"] = np.nan
-    df["owns_vehicles"] = np.nan
+    df["owns_vehicle"] = np.nan
     df["source"] = "lc"
 
     cleaned = df[UNIFIED_COLS].copy()
@@ -121,7 +120,8 @@ def synthetic_fill(df: pd.DataFrame) -> pd.DataFrame:
 # Add age to Lending club - beta distribution fit to give me some credit ages
 
     gmc_ages = df.loc[df["source"] == "gmc", "age"].dropna()
-    a, b, loc, scale, = stats.beta.fit(gmc_ages / 100, floc=0, fscale=1)
+    a, b, loc, scale = stats.beta.fit(
+        np.clip(gmc_ages / 100, 0.01, 0.99), floc=0, fscale=1)
     lc_mask = df["source"] == "lc"
     n_lc = lc_mask.sum()
     df.loc[lc_mask, "age"] = np.clip(
@@ -140,8 +140,8 @@ def synthetic_fill(df: pd.DataFrame) -> pd.DataFrame:
 
     for col in ["real_estate_loans", "dependents"]:
         gmc_vals = df.loc[df["source"] == "gmc", col].dropna()
-    lc_missing = (df["source"] == "lc") & df[col].isna()
-    df.loc[lc_missing, col] = rng.choice(
+        lc_missing = (df["source"] == "lc") & df[col].isna()
+        df.loc[lc_missing, col] = rng.choice(
         gmc_vals.values, lc_missing.sum())
 
 # Owns vehicle - log function of income (thhis should use real data only for reasons)
@@ -179,13 +179,22 @@ def balance_classes(df, target_ratio=0.20):
         return df
 
     print(f"Generating {n_needed} synthetic defaulter rows...")
-    base = defaulters.sample (n=n_needed, replace=True, random_state=42).copy()
+    base = defaulters.sample(n=n_needed, replace=True, random_state=42).copy()
+
+    # Exclude binary columns from noise — they must stay 0/1
+    binary_cols = ["owns_property", "owns_vehicle"]
     numeric_cols = [c for c in base.select_dtypes(include=[np.number]).columns
-                    if c not in ["defaulted"] and base[c].std() > 0]
+                    if c not in ["defaulted"] + binary_cols and base[c].std() > 0]
 
     for col in numeric_cols:
         noise = rng.normal(0, base[col].std() * 0.05, len(base))
-    base[col] = base[col] + noise
+        base[col] = base[col] + noise
+
+    # Restore binary columns to clean 0/1 after sampling
+    for col in binary_cols:
+        if col in base.columns:
+            base[col] = base[col].round().clip(0, 1)
+
     base["source"] = "synthetic_balance"
     combined = pd.concat([df, base], ignore_index=True)
     combined = combined.sample(frac=1, random_state=42).reset_index(drop=True)
@@ -199,14 +208,14 @@ def compare_distributions(combined):
     print("\n=== Distribution Comparison by Source ===")
 
     for feat in numeric_features:
-            if feat not in combined.columns: continue
-            print(f"\n{feat}:")
+        if feat not in combined.columns: continue
+        print(f"\n{feat}:")
 
-    for source in ["gmc", "lc", "synthetic", "synthetic_balance"]:
-        subset = combined.loc[combined["source"]==source, feat].dropna()
-        if len(subset) == 0: continue
-        miss = combined.loc[combined["source"]==source, feat].isna().mean()
-        print(f" {source:20s} mean={subset.mean():10.2f} "f"std={subset.std():9.2f} missing={miss:.1%}")
+        for source in ["gmc", "lc", "synthetic", "synthetic_balance"]:
+            subset = combined.loc[combined["source"] == source, feat].dropna()
+            if len(subset) == 0: continue
+            miss = combined.loc[combined["source"] == source, feat].isna().mean()
+            print(f" {source:20s} mean={subset.mean():10.2f} std={subset.std():9.2f} missing={miss:.1%}")
 
 def run_fusion():
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -251,7 +260,7 @@ def run_fusion():
     print(f"Final shape: {combined.shape}")
     for source in combined["source"].unique():
         s = combined[combined["source"] == source]
-    print(f" {source:20s}: {len(s):>8,} rows "
+        print(f" {source:20s}: {len(s):>8,} rows "
           f"{s['defaulted'].mean():.1%} default")
 
 if __name__ == "__main__":
