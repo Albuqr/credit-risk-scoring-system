@@ -219,3 +219,4 @@ data/*.csv
 shap_force_plot_high_risk.png
 data/lc/
 data/*.csv
+data/creditdb.sqlite
