@@ -4,6 +4,6 @@
   "recall": 0.7986,
   "f1": 0.7015,
   "train_auc": 0.9095,
-  "run_id": "6dbb693f3acd4666baeaadfc9bbb936b",
+  "run_id": "381948eec2484c5b93896b24e660ffea",
   "n_features": 32
 }

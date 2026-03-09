@@ -23,20 +23,60 @@ tab1,tab2,tab3 = st.tabs([
 
 with tab1:
     st.header('Model Performance')
-    c1,c2,c3,c4 = st.columns(4)
-    c1.metric('AUC-ROC', f'{metrics["auc"]:.3f}')
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric('AUC-ROC',   f'{metrics["auc"]:.3f}')
     c2.metric('Precision', f'{metrics["precision"]:.3f}')
-    c3.metric('Recall', f'{metrics["recall"]:.3f}')
-    c4.metric('F1 Score', f'{metrics["f1"]:.3f}')
+    c3.metric('Recall',    f'{metrics["recall"]:.3f}')
+    c4.metric('F1 Score',  f'{metrics["f1"]:.3f}')
 
-    comp = pd.DataFrame({'Model':['Logistic Reg.','Random Forest','XGBoost'],
-                         'AUC':[0.820, 0.851, metrics['auc']]})
-
+    comp = pd.DataFrame({'Model': ['Logistic Reg.', 'Random Forest', 'XGBoost'],
+                         'AUC':   [0.893, 0.905, metrics['auc']]})
     fig = px.bar(comp, x='Model', y='AUC', color='AUC',
                  color_continuous_scale='blues', title='Model Comparison')
-    fig.update_layout(yaxis_range=[0.7,1.0])
+    fig.update_layout(yaxis_range=[0.7, 1.0])
     st.plotly_chart(fig, use_container_width=True)
-    st.image(str(BASE_DIR / 'docs' / 'shap_summary.png'), caption='SHAP Global Importance', use_container_width=True)
+
+    import sqlite3
+    try:
+        conn = sqlite3.connect('data/creditdb.sqlite')
+        shap_df = pd.read_sql('SELECT * FROM shap_values', conn)
+        conn.close()
+
+        # Mean absolute SHAP — global importance bar chart
+        mean_abs = shap_df.drop(columns=['defaulted']).abs().mean().sort_values()
+        fig_summary = px.bar(
+            mean_abs, orientation='h',
+            title='SHAP Global Feature Importance',
+            labels={'value': 'Mean |SHAP|', 'index': 'Feature'},
+            color=mean_abs.values,
+            color_continuous_scale='reds'
+        )
+        fig_summary.update_layout(showlegend=False, coloraxis_showscale=False)
+
+        # Waterfall — highest risk customer
+        proba = shap_df.drop(columns=['defaulted']).sum(axis=1)
+        high_risk_idx = proba.idxmax()
+        single = shap_df.drop(columns=['defaulted']).iloc[high_risk_idx]
+        single_sorted = single.abs().sort_values(ascending=True).tail(10)
+        top_feats = single_sorted.index.tolist()
+        top_vals = single[top_feats]
+        fig_waterfall = px.bar(
+            x=top_vals.values, y=top_feats, orientation='h',
+            title='SHAP Waterfall — Highest Risk Customer',
+            labels={'x': 'SHAP Value', 'y': 'Feature'},
+            color=top_vals.values,
+            color_continuous_scale='RdBu_r'
+        )
+        fig_waterfall.update_layout(coloraxis_showscale=False)
+
+        col1, col2 = st.columns(2)
+        with col1:
+            st.plotly_chart(fig_summary, use_container_width=True)
+        with col2:
+            st.plotly_chart(fig_waterfall, use_container_width=True)
+
+    except Exception as e:
+        st.warning(f'SHAP visualisation unavailable: {e}')
 
 with tab2:
     st.header('Score a Customer')

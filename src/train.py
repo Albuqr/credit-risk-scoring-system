@@ -118,7 +118,18 @@ def train_all():
         explainer_raw = shap.TreeExplainer(xgb)
         joblib.dump(explainer_raw, MODELS_DIR / 'shap_explainer_raw.pkl')
 
+        import sqlite3, pandas as pd
+        shap_sample_idx = np.random.default_rng(42).choice(len(X_test_raw), size=2000, replace=False)
+        shap_sample = X_test_raw.iloc[shap_sample_idx]
+        shap_vals_db = explainer.shap_values(shap_sample)
+        shap_df = pd.DataFrame(shap_vals_db, columns=FEATURE_NAMES)
+        shap_df['defaulted'] = y_test[shap_sample_idx]
+        with sqlite3.connect('data/creditdb.sqlite') as conn:
+            shap_df.to_sql('shap_values', conn, if_exists='replace', index=False)
+        print('Saved shap_values table to creditdb.sqlite')
+
         return xgb
+
 
 
 if __name__ == '__main__':
