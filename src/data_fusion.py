@@ -9,8 +9,8 @@ import sqlite3
 from src.synthetic_generator import generate_synthetic_slice, validate_synthetic
 
 DB_PATH = Path("data/creditdb.sqlite")
-GMC_PATH = Path("data/gmc/cs-training.csv")
-LC_PATH = Path("data/lc/loan.csv")
+GMC_PATH = Path("/opt/credit-risk-data/gmc/cs-training.csv")
+LC_PATH = Path("/opt/credit-risk-data/lc/loan.csv")
 
 def get_conn():
     return sqlite3.connect(DB_PATH)

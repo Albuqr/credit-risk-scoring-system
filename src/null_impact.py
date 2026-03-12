@@ -45,7 +45,7 @@ def run_null_impact_analysis():
         if feat not in baseline:
             continue
         nulled = baseline.copy()
-        nulled[feat] = None
+        nulled[feat] = np.nan
         _, X_null = customer_to_features(nulled)
         null_prob = model.predict_proba(X_null)[0][1]
         delta = null_prob - base_prob
