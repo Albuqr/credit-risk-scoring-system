@@ -128,7 +128,7 @@ with tab3:
 
     conn = sqlite3.connect('data/creditdb.sqlite')
     sample = pd.read_sql_query(
-        'SELECT * FROM raw_credit_data ORDER BY RANDOM() LIMIT 5000', conn)
+        'SELECT * FROM unified_credit_data ORDER BY RANDOM() LIMIT 5000', conn)
     conn.close()
     feat = st.selectbox('Select feature to inspect', sample.columns[1:])
     fig = px.histogram(sample, x=feat, color='defaulted',
