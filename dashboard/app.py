@@ -136,16 +136,23 @@ with tab2:
                 st.caption('Pushes default probability UP' if f.direction == 'increases_risk' else 'Pushes default probability DOWN')
 
         try:
-            import matplotlib.pyplot as plt
-            import shap
+            from src.features import FEATURE_NAMES
             X_raw = predictor._build_features(customer_input)
-            shap_explanation = predictor.explainer(X_raw)
-            st.subheader('SHAP Waterfall — This Customer')
-            fig, ax = plt.subplots()
-            shap.plots.waterfall(shap_explanation[0], max_display=10, show=False)
-            plt.tight_layout()
-            st.pyplot(fig)
-            plt.close()
+            shap_vals = predictor.explainer.shap_values(X_raw)[0]
+            shap_series = pd.Series(shap_vals, index=FEATURE_NAMES)
+            top_shap_vals = shap_series.reindex(
+                shap_series.abs().sort_values(ascending=True).tail(10).index
+            )
+            fig_wf = px.bar(
+                x=top_shap_vals.values, y=top_shap_vals.index,
+                orientation='h',
+                title='SHAP Waterfall — This Customer',
+                labels={'x': 'SHAP Value', 'y': 'Feature'},
+                color=top_shap_vals.values,
+                color_continuous_scale='RdBu_r'
+            )
+            fig_wf.update_layout(coloraxis_showscale=False)
+            st.plotly_chart(fig_wf, use_container_width=True)
         except Exception:
             st.info('SHAP waterfall unavailable.')
 
