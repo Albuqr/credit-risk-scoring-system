@@ -86,19 +86,26 @@ with tab2:
         age = st.number_input('Age', 18, 100, 40)
         income = st.number_input('Monthly Income ($)', 0, 200000, 5000)
         debt = st.slider('Debt Ratio', 0.0, 2.0, 0.30)
+        loan_amount = st.number_input('Loan Amount ($)', 0, 500000, 15000)
+        loan_purpose = st.selectbox('Loan Purpose', ['personal', 'auto', 'mortgage', 'education', 'business', 'other'])
 
     with c2:
         lines = st.number_input('Open Credit Lines', 0, 50, 7)
-        total_lines = st.number_input('Total Credit Lines', 0, 50, 10)
         late = st.number_input('Total Late Payments', 0, 100, 0)
         re = st.number_input('Real Estate Loans', 0, 20, 1)
         deps = st.number_input('Dependents', 0, 20, 0)
+        months_employed = st.number_input('Months Employed (0 = unknown)', 0, 480, 36)
+        owns_property = st.checkbox('Owns Property')
+        owns_vehicle = st.checkbox('Owns Vehicle')
 
     if st.button('Score', type='primary'):
         r = predictor.predict(CustomerInput(
             revolving_utilization=util, age=age, monthly_income=income,
-            debt_ratio=debt, open_credit_lines=lines, total_credit_lines=total_lines,
-            total_late_payments=late, real_estate_loans=re, dependents=deps))
+            debt_ratio=debt, open_credit_lines=lines,
+            total_late_payments=late, real_estate_loans=re, dependents=deps,
+            loan_amount=loan_amount, loan_purpose=loan_purpose,
+            months_employed=months_employed if months_employed > 0 else None,
+            owns_property=float(owns_property), owns_vehicle=float(owns_vehicle)))
         col = {'LOW': 'green', 'MEDIUM': 'orange', 'HIGH': 'red'}
         rc = r.risk_category.value
 
@@ -126,7 +133,7 @@ with tab3:
     st.header('Feature Distributions by Default Status')
     import sqlite3
 
-    conn = sqlite3.connect('data/creditdb.sqlite')
+    conn = sqlite3.connect('/app/data/creditdb.sqlite')
     sample = pd.read_sql_query(
         'SELECT * FROM unified_credit_data ORDER BY RANDOM() LIMIT 5000', conn)
     conn.close()
