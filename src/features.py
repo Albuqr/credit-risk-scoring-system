@@ -51,7 +51,7 @@ def engineer_features(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
 
     ## Log Transforms - log(x+1) handles zero, compresses right skew
-    df['log_income'] = np.log1p(df['monthly_income'])
+    df['log_income'] = np.log1p(df['monthly_income'].astype(float))
     df['debt_to_income'] = df['debt_ratio'] * df['monthly_income'].fillna(0)
     df['log_debt_to_income'] = np.log1p(df['debt_to_income'])
 
