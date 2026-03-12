@@ -5,22 +5,34 @@ services:
     ports:
       - '8000:8000'
     volumes:
-      - ./models:/app/models
-      - ./data:/app/data
+      - credit-data:/app/data
+      - credit-models:/app/models
     environment:
       - PYTHONPATH=/app
     restart: unless-stopped
-
   dashboard:
     build: .
     command: streamlit run dashboard/app.py --server.port 8501 --server.address 0.0.0.0
     ports:
       - '8501:8501'
     volumes:
-      - ./models:/app/models
-      - ./data:/app/data
+      - credit-data:/app/data
+      - credit-models:/app/models
     environment:
       - PYTHONPATH=/app
     depends_on:
       - api
-    restart: unless-stopped
+
+volumes:
+  credit-data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /opt/credit-risk-data
+  credit-models:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /opt/credit-risk-data/models
