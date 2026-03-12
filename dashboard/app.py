@@ -82,10 +82,13 @@ with tab2:
     st.header('Score a Customer')
     c1,c2 = st.columns(2)
     with c1:
-        util = st.slider('Credit Utilization', 0.0, 1.0, 0.35)
+        util = st.slider('Credit Utilization', 0.0, 1.0, 0.35,
+                         help='Ratio of credit card balance to credit limit. 0.35 means using 35% of available credit.')
         age = st.number_input('Age', 18, 100, 40)
-        income = st.number_input('Monthly Income ($)', 0, 200000, 5000)
-        debt = st.slider('Debt Ratio', 0.0, 2.0, 0.30)
+        income_known = st.checkbox('Monthly Income known', value=True)
+        income = st.number_input('Monthly Income ($)', 0, 200000, 5000, disabled=not income_known)
+        debt = st.slider('Debt Ratio', 0.0, 2.0, 0.30,
+                         help='Monthly debt payments divided by monthly income. Above 0.43 is considered high risk by most lenders.')
         loan_amount = st.number_input('Loan Amount ($)', 0, 500000, 15000)
         loan_purpose = st.selectbox('Loan Purpose', ['personal', 'auto', 'mortgage', 'education', 'business', 'other'])
 
@@ -94,18 +97,21 @@ with tab2:
         late = st.number_input('Total Late Payments', 0, 100, 0)
         re = st.number_input('Real Estate Loans', 0, 20, 1)
         deps = st.number_input('Dependents', 0, 20, 0)
-        months_employed = st.number_input('Months Employed (0 = unknown)', 0, 480, 36)
+        months_known = st.checkbox('Months Employed known', value=True)
+        months_employed = st.number_input('Months Employed', 0, 480, 36, disabled=not months_known)
         owns_property = st.checkbox('Owns Property')
         owns_vehicle = st.checkbox('Owns Vehicle')
 
     if st.button('Score', type='primary'):
-        r = predictor.predict(CustomerInput(
-            revolving_utilization=util, age=age, monthly_income=income,
+        customer_input = CustomerInput(
+            revolving_utilization=util, age=age,
+            monthly_income=income if income_known else None,
             debt_ratio=debt, open_credit_lines=lines,
             total_late_payments=late, real_estate_loans=re, dependents=deps,
             loan_amount=loan_amount, loan_purpose=loan_purpose,
-            months_employed=months_employed if months_employed > 0 else None,
-            owns_property=float(owns_property), owns_vehicle=float(owns_vehicle)))
+            months_employed=months_employed if months_known else None,
+            owns_property=float(owns_property), owns_vehicle=float(owns_vehicle))
+        r = predictor.predict(customer_input)
         col = {'LOW': 'green', 'MEDIUM': 'orange', 'HIGH': 'red'}
         rc = r.risk_category.value
 
@@ -128,6 +134,20 @@ with tab2:
                 st.markdown(f'**{icon} {f.feature}**')
                 st.write(f'{f.shap_value:+.4f}')
                 st.caption('Pushes default probability UP' if f.direction == 'increases_risk' else 'Pushes default probability DOWN')
+
+        try:
+            import matplotlib.pyplot as plt
+            import shap
+            X_raw = predictor._build_features(customer_input)
+            shap_explanation = predictor.explainer(X_raw)
+            st.subheader('SHAP Waterfall — This Customer')
+            fig, ax = plt.subplots()
+            shap.plots.waterfall(shap_explanation[0], max_display=10, show=False)
+            plt.tight_layout()
+            st.pyplot(fig)
+            plt.close()
+        except Exception:
+            st.info('SHAP waterfall unavailable.')
 
 with tab3:
     st.header('Feature Distributions by Default Status')
