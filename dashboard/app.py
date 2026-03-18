@@ -5,6 +5,9 @@ import json
 import numpy as np
 import plotly.express as px
 from pathlib import Path
+import io
+import xlsxwriter
+import datetime
 import sys; sys.path.append('.')
 BASE_DIR = Path(__file__).parent.parent
 from api.predictor import CreditRiskPredictor
@@ -112,6 +115,12 @@ with tab2:
             months_employed=months_employed if months_known else None,
             owns_property=float(owns_property), owns_vehicle=float(owns_vehicle))
         r = predictor.predict(customer_input)
+        st.session_state['last_prediction'] = r
+        st.session_state['last_inputs'] = {
+            'revolving_utilization': util, 'age': age, 'monthly_income': income,
+            'debt_ratio': debt, 'open_credit_lines': lines, 'total_late_payments': late,
+            'real_estate_loans': re, 'dependents': deps
+        }
         col = {'LOW': 'green', 'MEDIUM': 'orange', 'HIGH': 'red'}
         rc = r.risk_category.value
 
@@ -155,6 +164,96 @@ with tab2:
             st.plotly_chart(fig_wf, use_container_width=True)
         except Exception:
             st.info('SHAP waterfall unavailable.')
+
+    if 'last_prediction' in st.session_state:
+        r = st.session_state['last_prediction']
+        inputs = st.session_state['last_inputs']
+
+        def build_excel(r, inputs) -> bytes:
+            output = io.BytesIO()
+            wb = xlsxwriter.Workbook(output, {'in_memory': True})
+
+            bold = wb.add_format({'bold': True})
+            hdr = wb.add_format({'bold': True, 'bg_color': '#1f4e79', 'font_color': 'white', 'border': 1})
+            cell = wb.add_format({'border': 1})
+            risk_bg = {'LOW': '#c6efce', 'MEDIUM': '#ffeb9c', 'HIGH': '#ffc7ce'}
+            rc = r.risk_category.value
+            risk_fmt = wb.add_format({'bold': True, 'bg_color': risk_bg.get(rc, '#ffffff'), 'border': 1})
+
+            # Sheet 1 — Summary
+            ws1 = wb.add_worksheet('Prediction Report')
+            ws1.set_column('A:A', 28)
+            ws1.set_column('B:B', 22)
+            ws1.set_column('C:C', 22)
+
+            ws1.write('A1', 'Credit Risk Prediction Report', wb.add_format({'bold': True, 'font_size': 14}))
+            ws1.write('A2', f'Generated: {datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}')
+
+            row = 4
+            ws1.write(row, 0, 'PREDICTION SUMMARY', bold); row += 1
+            for label, value, fmt in [
+                ('Risk Category', rc, risk_fmt),
+                ('Default Probability', f'{r.default_probability:.2%}', cell),
+                ('Risk Score (300–850)', str(r.risk_score), cell),
+                ('Model Version', r.model_version, cell),
+            ]:
+                ws1.write(row, 0, label, cell)
+                ws1.write(row, 1, value, fmt)
+                row += 1
+
+            row += 1
+            ws1.write(row, 0, 'CUSTOMER INPUTS', bold); row += 1
+            ws1.write(row, 0, 'Feature', hdr); ws1.write(row, 1, 'Value', hdr); row += 1
+            for k, v in inputs.items():
+                ws1.write(row, 0, k.replace('_', ' ').title(), cell)
+                ws1.write(row, 1, v, cell)
+                row += 1
+
+            row += 1
+            ws1.write(row, 0, 'TOP 5 SHAP RISK FACTORS', bold); row += 1
+            ws1.write(row, 0, 'Feature', hdr)
+            ws1.write(row, 1, 'SHAP Value', hdr)
+            ws1.write(row, 2, 'Direction', hdr)
+            row += 1
+            for f in r.top_risk_factors:
+                ws1.write(row, 0, f.feature, cell)
+                ws1.write(row, 1, round(f.shap_value, 6), cell)
+                ws1.write(row, 2, f.direction.replace('_', ' '), cell)
+                row += 1
+
+            # Sheet 2 — SHAP Chart
+            ws2 = wb.add_worksheet('SHAP Chart')
+            ws2.set_column('A:A', 30)
+            ws2.set_column('B:B', 15)
+            ws2.write('A1', 'SHAP Risk Factor Chart', wb.add_format({'bold': True, 'font_size': 13}))
+            ws2.write(2, 0, 'Feature', hdr); ws2.write(2, 1, 'SHAP Value', hdr)
+            for i, f in enumerate(r.top_risk_factors):
+                ws2.write(3 + i, 0, f.feature, cell)
+                ws2.write(3 + i, 1, round(f.shap_value, 6), cell)
+
+            chart = wb.add_chart({'type': 'bar'})
+            chart.add_series({
+                'name': 'SHAP Value',
+                'categories': ['SHAP Chart', 3, 0, 3 + len(r.top_risk_factors) - 1, 0],
+                'values':     ['SHAP Chart', 3, 1, 3 + len(r.top_risk_factors) - 1, 1],
+                'fill': {'color': '#1f4e79'},
+            })
+            chart.set_title({'name': 'Top 5 SHAP Risk Factors'})
+            chart.set_x_axis({'name': 'SHAP Value'})
+            chart.set_y_axis({'name': 'Feature'})
+            chart.set_size({'width': 480, 'height': 300})
+            ws2.insert_chart('D2', chart)
+
+            wb.close()
+            return output.getvalue()
+
+        excel_bytes = build_excel(r, inputs)
+        st.download_button(
+            label='📥 Export to Excel',
+            data=excel_bytes,
+            file_name=f'credit_risk_{datetime.datetime.now().strftime("%Y%m%d_%H%M%S")}.xlsx',
+            mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        )
 
 with tab3:
     st.header('Feature Distributions by Default Status')
