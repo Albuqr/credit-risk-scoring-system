@@ -8,182 +8,61 @@
 
 ![Python](https://img.shields.io/badge/Python-3.11-blue?style=flat-square) ![Model](https://img.shields.io/badge/Model-XGBoost-orange?style=flat-square) ![API](https://img.shields.io/badge/API-FastAPI-009688?style=flat-square) ![Dashboard](https://img.shields.io/badge/Dashboard-Streamlit-FF4B4B?style=flat-square) ![Infra](https://img.shields.io/badge/Infra-Docker-2496ED?style=flat-square) ![DB](https://img.shields.io/badge/DB-SQLite-003B57?style=flat-square) ![Tracking](https://img.shields.io/badge/Tracking-MLflow-0194E2?style=flat-square) ![Explainability](https://img.shields.io/badge/Explainability-SHAP-8A2BE2?style=flat-square) ![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)
 
-## Visão Geral
+## Sobre
 
-Sistema de scoring de crédito com foco em produção, treinado no dataset Give Me Some Credit (150.000 registros) com XGBoost como modelo principal. A API retorna probabilidade de inadimplência, score entre 300 e 850 e os 5 principais fatores de risco por predição via SHAP, viabilizando conformidade com o Artigo 20 da LGPD. O projeto foi desenvolvido como portfólio técnico direcionado a posições de ciência de dados em fintechs como Nubank, Itaú, Bradesco e Santander.
+Pipeline de scoring de crédito do dado bruto ao deploy. Classifica solicitantes por probabilidade de inadimplência e devolve um score entre 300 e 850, junto dos 5 fatores que mais pesaram na decisão — calculados via SHAP para cada predição individualmente, não como média global.
 
-## Demo ao Vivo
+O pipeline lê exclusivamente de tabelas SQLite. Nenhum CSV é lido em nenhuma etapa de treinamento ou serving. Cada run de treinamento é registrado no MLflow. A API tem rate limiting por IP, validação de entrada via Pydantic e documentação interativa gerada automaticamente.
 
-[![API Docs](https://img.shields.io/badge/API-Docs-009688?style=flat-square)](https://api.albuqr.com/docs) [![Live Dashboard](https://img.shields.io/badge/Dashboard-Live-FF4B4B?style=flat-square)](https://dashboard.albuqr.com)
+[![API Docs](https://img.shields.io/badge/API-api.albuqr.com/docs-009688?style=flat-square)](https://api.albuqr.com/docs) [![Dashboard](https://img.shields.io/badge/Dashboard-dashboard.albuqr.com-FF4B4B?style=flat-square)](https://dashboard.albuqr.com)
 
-## Arquitetura
+## Endpoints
 
-```
-Give Me Some Credit (CSV)
-          |
-          v
-    load_data.py
-          |
-          v
-  data/creditdb.sqlite
-          |
-          v
-  src/data_pipeline.py
-          |
-          v
-     src/features.py
-          |
-          v
-  src/train.py (MLflow)
-          |
-          v
-  models/credit_model.pkl
-  models/scaler.pkl
-  models/shap_explainer.pkl
-          |
-       +--+--+
-       |     |
-       v     v
-  FastAPI  Streamlit
-  :8000    :8501
-       |     |
-       v     v
-api.albuqr.com  dashboard.albuqr.com
-        (Traefik + SSL, Easypanel)
-```
+| Método | Rota | Limite | Descrição |
+|---|---|---|---|
+| GET | `/health` | — | Status do serviço |
+| GET | `/model-info` | — | Métricas e features do modelo em produção |
+| POST | `/predict` | 30/min por IP | Score de um solicitante com explicação SHAP |
+| POST | `/batch-predict` | 5/min por IP | Score em lote |
 
-## Stack Tecnológica
-
-| Camada | Tecnologia | Finalidade |
-|---|---|---|
-| Dados | SQLite + pandas | Pipeline SQL-first; sem leitura direta de CSV em produção |
-| Modelo | XGBoost | Classificação binária de risco de crédito |
-| Baselines | Logistic Regression, Random Forest | Comparação de performance no dashboard |
-| Explicabilidade | SHAP TreeExplainer | Top 5 fatores de risco por predição |
-| Rastreamento | MLflow | Registro de experimentos e métricas |
-| API | FastAPI + Pydantic + Uvicorn | Endpoints /predict, /batch-predict, /health |
-| Dashboard | Streamlit | Performance do modelo, predição interativa, distribuições |
-| Containerização | Docker + docker-compose | Dois serviços isolados: API e dashboard |
-| Deploy | Easypanel + Traefik | VPS Ubuntu, SSL automático, roteamento por domínio |
-
-## Resultados do Modelo
+## Performance
 
 | Métrica | Valor |
 |---|---|
 | AUC-ROC | 0.869 |
-| Precision | 0.423 |
+| Precision | 0.424 |
 | Recall | 0.450 |
-| F1 Score | 0.436 |
+| F1 Score | 0.437 |
 
-Baselines avaliados: Logistic Regression e Random Forest. Comparação disponível no dashboard.
+Treinado no Give Me Some Credit (Kaggle) — 150.000 registros, ~7% de inadimplência. Desbalanceamento tratado com `scale_pos_weight`. Comparado contra Logistic Regression e Random Forest no dashboard.
 
-## Estrutura do Projeto
+## Stack
 
-```
-credit-risk-scoring-system/
-├── api/
-│   ├── main.py               # FastAPI: /predict, /batch-predict, /health
-│   ├── predictor.py          # Carregamento do modelo e lógica de predição
-│   └── schemas.py            # Schemas Pydantic de entrada e saída
-├── src/
-│   ├── data_pipeline.py      # Leitura do SQLite, split, scaling
-│   ├── features.py           # Engenharia de features, FEATURE_NAMES
-│   └── train.py              # Treinamento com MLflow, XGBoost + baselines
-├── dashboard/
-│   └── app.py                # Dashboard Streamlit (3 abas)
-├── models/
-│   ├── credit_model.pkl
-│   ├── scaler.pkl
-│   ├── shap_explainer.pkl
-│   └── metrics.json
-├── data/
-│   └── creditdb.sqlite
-├── docs/
-│   ├── shap_summary.png
-│   ├── shap_waterfall.png
-│   ├── class_imbalance.png
-│   ├── correlations.png
-│   └── distributions.png
-├── notebooks/
-├── Dockerfile
-├── Dockerfile.dashboard
-├── docker-compose.yml
-├── load_data.py
-├── requirements.txt
-├── requirements-docker.txt
-└── .gitignore
-```
-
-## Como Executar
-
-**1. Clone o repositório**
-```bash
-git clone https://github.com/Albuqr/credit-risk-scoring-system.git
-cd credit-risk-scoring-system
-```
-
-**2. Instale as dependências**
-```bash
-pip install -r requirements.txt
-```
-
-**3. Suba os containers**
-```bash
-docker-compose up
-```
-
-API disponível em `http://localhost:8000/docs`, dashboard em `http://localhost:8501`.
-
-## API — Entrada e Saída
-
-**POST /predict**
-
-Requisição:
-```json
-{
-  "revolving_utilization": 0.45,
-  "age": 34,
-  "monthly_income": 5000.0,
-  "debt_ratio": 0.38,
-  "open_credit_lines": 6,
-  "total_late_payments": 1,
-  "real_estate_loans": 1,
-  "dependents": 2
-}
-```
-
-Resposta:
-```json
-{
-  "default_probability": 0.312,
-  "risk_score": 621,
-  "risk_category": "MEDIUM",
-  "prediction_confidence": "HIGH",
-  "top_risk_factors": [
-    {"feature": "revolving_utilization", "direction": "increases risk", "value": 0.45},
-    {"feature": "total_late_payments", "direction": "increases risk", "value": 1},
-    {"feature": "debt_ratio", "direction": "increases risk", "value": 0.38},
-    {"feature": "age", "direction": "decreases risk", "value": 34},
-    {"feature": "monthly_income", "direction": "decreases risk", "value": 5000.0}
-  ]
-}
-```
+| Camada | Tecnologia |
+|---|---|
+| Modelo | XGBoost + Logistic Regression + Random Forest |
+| Explicabilidade | SHAP TreeExplainer |
+| Rastreamento | MLflow |
+| API | FastAPI + Pydantic + slowapi |
+| Dashboard | Streamlit |
+| Banco de Dados | SQLite |
+| Containerização | Docker + docker-compose |
+| Deploy | Easypanel + Traefik + VPS Ubuntu |
 
 ## Conformidade LGPD
 
-Cada predição retorna os 5 fatores que mais influenciaram o resultado, calculados via SHAP TreeExplainer com direção de impacto. Isso atende ao Artigo 20 da LGPD, que exige explicação e possibilidade de revisão humana em decisões automatizadas com efeito significativo sobre o titular — tornando o modelo defensável juridicamente em contextos de crédito automatizado no Brasil.
+Cada resposta da API inclui os 5 fatores individuais que influenciaram aquela decisão específica, com direção de impacto. Atende ao Artigo 20 da LGPD, que exige explicabilidade e possibilidade de revisão humana em decisões automatizadas com efeito significativo sobre o titular.
 
 ## Limitações
 
-- Os dados de treinamento são exclusivamente americanos (Give Me Some Credit, Kaggle); distribuições de renda, endividamento e comportamento de crédito diferem do mercado brasileiro
-- O modelo não foi validado em dados de produção real; métricas refletem desempenho em conjunto de teste do mesmo dataset
-- SQLite não suporta concorrência de escrita; inadequado para cargas multi-usuário em produção
-- Os endpoints da API não possuem autenticação; não devem ser expostos publicamente sem camada de segurança adicional
-- Os limiares LOW / MEDIUM / HIGH não foram calibrados contra taxas de inadimplência reais do mercado brasileiro
+- Dados de treinamento americanos; comportamento de crédito e distribuições de renda diferem do mercado brasileiro
+- Limiares LOW / MEDIUM / HIGH não calibrados contra taxas reais de inadimplência brasileiras
+- SQLite sem suporte a escrita concorrente
+- Sem autenticação nos endpoints
 
 ## Licença
 
-MIT License © 2026 João Pedro Castro Albuquerque
+MIT © 2026 João Pedro Castro Albuquerque
 
 ---
 
@@ -197,182 +76,61 @@ Built by Albuquerque · [albuqr.com](https://albuqr.com) · [GitHub: Albuqr](htt
 
 ![Python](https://img.shields.io/badge/Python-3.11-blue?style=flat-square) ![Model](https://img.shields.io/badge/Model-XGBoost-orange?style=flat-square) ![API](https://img.shields.io/badge/API-FastAPI-009688?style=flat-square) ![Dashboard](https://img.shields.io/badge/Dashboard-Streamlit-FF4B4B?style=flat-square) ![Infra](https://img.shields.io/badge/Infra-Docker-2496ED?style=flat-square) ![DB](https://img.shields.io/badge/DB-SQLite-003B57?style=flat-square) ![Tracking](https://img.shields.io/badge/Tracking-MLflow-0194E2?style=flat-square) ![Explainability](https://img.shields.io/badge/Explainability-SHAP-8A2BE2?style=flat-square) ![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)
 
-## Overview
+## About
 
-A production-grade credit risk scoring system trained on the Give Me Some Credit dataset (150,000 records) using XGBoost as the primary model. The API returns default probability, a 300–850 risk score, and the top 5 SHAP-explained risk factors per prediction, supporting compliance with Article 20 of Brazil's LGPD. Built as a technical portfolio project targeting data science roles at Brazilian fintechs including Nubank, Itaú, Bradesco, and Santander.
+Credit risk scoring pipeline from raw data to deployment. Classifies applicants by default probability and returns a 300–850 risk score alongside the 5 features that most influenced the decision — computed via SHAP per prediction, not as a global average.
 
-## Live Demo
+The pipeline reads exclusively from SQLite tables. No CSV is read at any stage of training or serving. Every training run is logged in MLflow. The API has per-IP rate limiting, Pydantic input validation, and auto-generated interactive documentation.
 
-[![API Docs](https://img.shields.io/badge/API-Docs-009688?style=flat-square)](https://api.albuqr.com/docs) [![Live Dashboard](https://img.shields.io/badge/Dashboard-Live-FF4B4B?style=flat-square)](https://dashboard.albuqr.com)
+[![API Docs](https://img.shields.io/badge/API-api.albuqr.com/docs-009688?style=flat-square)](https://api.albuqr.com/docs) [![Dashboard](https://img.shields.io/badge/Dashboard-dashboard.albuqr.com-FF4B4B?style=flat-square)](https://dashboard.albuqr.com)
 
-## Architecture
+## Endpoints
 
-```
-Give Me Some Credit (CSV)
-          |
-          v
-    load_data.py
-          |
-          v
-  data/creditdb.sqlite
-          |
-          v
-  src/data_pipeline.py
-          |
-          v
-     src/features.py
-          |
-          v
-  src/train.py (MLflow)
-          |
-          v
-  models/credit_model.pkl
-  models/scaler.pkl
-  models/shap_explainer.pkl
-          |
-       +--+--+
-       |     |
-       v     v
-  FastAPI  Streamlit
-  :8000    :8501
-       |     |
-       v     v
-api.albuqr.com  dashboard.albuqr.com
-        (Traefik + SSL, Easypanel)
-```
+| Method | Route | Rate Limit | Description |
+|---|---|---|---|
+| GET | `/health` | — | Service status |
+| GET | `/model-info` | — | Live model metrics and feature list |
+| POST | `/predict` | 30/min per IP | Score a single applicant with SHAP explanation |
+| POST | `/batch-predict` | 5/min per IP | Score a batch of applicants |
 
-## Tech Stack
-
-| Layer | Technology | Purpose |
-|---|---|---|
-| Data | SQLite + pandas | SQL-first pipeline; no raw CSV reads in production |
-| Model | XGBoost | Binary classification of credit default risk |
-| Baselines | Logistic Regression, Random Forest | Performance comparison shown in dashboard |
-| Explainability | SHAP TreeExplainer | Top 5 risk factors per prediction with direction |
-| Experiment Tracking | MLflow | Run logging, metric tracking, model registry |
-| API | FastAPI + Pydantic + Uvicorn | /predict, /batch-predict, /health endpoints |
-| Dashboard | Streamlit | Model performance, live predictor, feature distributions |
-| Containerisation | Docker + docker-compose | Two isolated services: API and dashboard |
-| Deployment | Easypanel + Traefik | Ubuntu VPS, automatic SSL, domain-based routing |
-
-## Model Performance
+## Performance
 
 | Metric | Value |
 |---|---|
 | AUC-ROC | 0.869 |
-| Precision | 0.423 |
+| Precision | 0.424 |
 | Recall | 0.450 |
-| F1 Score | 0.436 |
+| F1 Score | 0.437 |
 
-Baselines evaluated: Logistic Regression and Random Forest. Full comparison available in the dashboard.
+Trained on Give Me Some Credit (Kaggle) — 150,000 records, ~7% default rate. Class imbalance handled via `scale_pos_weight`. Benchmarked against Logistic Regression and Random Forest baselines, compared in the dashboard.
 
-## Project Structure
+## Stack
 
-```
-credit-risk-scoring-system/
-├── api/
-│   ├── main.py               # FastAPI app: /predict, /batch-predict, /health
-│   ├── predictor.py          # Model loading and prediction logic
-│   └── schemas.py            # Pydantic input/output schemas
-├── src/
-│   ├── data_pipeline.py      # SQLite reads, train/test split, scaling
-│   ├── features.py           # Feature engineering, FEATURE_NAMES list
-│   └── train.py              # MLflow training: XGBoost + baselines
-├── dashboard/
-│   └── app.py                # Streamlit dashboard (3 tabs)
-├── models/
-│   ├── credit_model.pkl
-│   ├── scaler.pkl
-│   ├── shap_explainer.pkl
-│   └── metrics.json
-├── data/
-│   └── creditdb.sqlite
-├── docs/
-│   ├── shap_summary.png
-│   ├── shap_waterfall.png
-│   ├── class_imbalance.png
-│   ├── correlations.png
-│   └── distributions.png
-├── notebooks/
-├── Dockerfile
-├── Dockerfile.dashboard
-├── docker-compose.yml
-├── load_data.py
-├── requirements.txt
-├── requirements-docker.txt
-└── .gitignore
-```
-
-## Quick Start
-
-**1. Clone the repository**
-```bash
-git clone https://github.com/Albuqr/credit-risk-scoring-system.git
-cd credit-risk-scoring-system
-```
-
-**2. Install dependencies**
-```bash
-pip install -r requirements.txt
-```
-
-**3. Start the containers**
-```bash
-docker-compose up
-```
-
-The API will be available at `http://localhost:8000/docs` and the dashboard at `http://localhost:8501`.
-
-## API Reference
-
-**POST /predict**
-
-Request body:
-```json
-{
-  "revolving_utilization": 0.45,
-  "age": 34,
-  "monthly_income": 5000.0,
-  "debt_ratio": 0.38,
-  "open_credit_lines": 6,
-  "total_late_payments": 1,
-  "real_estate_loans": 1,
-  "dependents": 2
-}
-```
-
-Response:
-```json
-{
-  "default_probability": 0.312,
-  "risk_score": 621,
-  "risk_category": "MEDIUM",
-  "prediction_confidence": "HIGH",
-  "top_risk_factors": [
-    {"feature": "revolving_utilization", "direction": "increases risk", "value": 0.45},
-    {"feature": "total_late_payments", "direction": "increases risk", "value": 1},
-    {"feature": "debt_ratio", "direction": "increases risk", "value": 0.38},
-    {"feature": "age", "direction": "decreases risk", "value": 34},
-    {"feature": "monthly_income", "direction": "decreases risk", "value": 5000.0}
-  ]
-}
-```
+| Layer | Technology |
+|---|---|
+| Model | XGBoost + Logistic Regression + Random Forest |
+| Explainability | SHAP TreeExplainer |
+| Experiment Tracking | MLflow |
+| API | FastAPI + Pydantic + slowapi |
+| Dashboard | Streamlit |
+| Database | SQLite |
+| Containerisation | Docker + docker-compose |
+| Deployment | Easypanel + Traefik + Ubuntu VPS |
 
 ## LGPD Compliance
 
-Every prediction returns the five features that most influenced the outcome, computed via SHAP TreeExplainer with explicit impact direction. This satisfies Article 20 of Brazil's Lei Geral de Proteção de Dados, which requires that automated decisions with significant effects on data subjects be explainable and subject to human review. The model output is designed to be legally defensible in automated credit decision contexts.
+Every API response includes the 5 individual features that influenced that specific decision, with impact direction. This satisfies Article 20 of Brazil's LGPD, which requires that automated decisions with significant effects on data subjects be explainable and subject to human review.
 
 ## Limitations
 
-- Training data is exclusively US-based (Give Me Some Credit, Kaggle); income distributions, debt behaviour, and default patterns differ materially from the Brazilian market
-- The model has not been validated against live production data; reported metrics reflect held-out test set performance from the same dataset
-- SQLite does not support concurrent writes; it is not suitable for multi-user production workloads
-- API endpoints have no authentication layer; they must not be exposed publicly without additional security controls
-- LOW / MEDIUM / HIGH risk thresholds were not calibrated against real Brazilian default rates and should not be used for actual credit decisions without recalibration
+- Training data is US-based; credit behaviour and income distributions differ from the Brazilian market
+- LOW / MEDIUM / HIGH thresholds not calibrated against real Brazilian default rates
+- SQLite has no concurrent write support
+- No authentication on API endpoints
 
 ## License
 
-MIT License © 2026 João Pedro Castro Albuquerque
+MIT © 2026 João Pedro Castro Albuquerque
 
 ---
 
